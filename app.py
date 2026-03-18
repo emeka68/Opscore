@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
-from opscore import tracker, kpi, anomaly, sop
+from opscore import tracker, kpi, anomaly, sop, mes_connector, live_tracker
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "opscore-dev-key-change-in-prod")
@@ -141,6 +141,113 @@ def api_shipments():
         return jsonify([])
     _, shipments = tracker.run(ship_file, alert=False)
     return jsonify(shipments)
+
+# ── MES Routes ─────────────────────────────────────────────────────────────────
+
+@app.route("/mes")
+def mes_page():
+    return render_template("mes.html")
+
+@app.route("/mes/import", methods=["POST"])
+def mes_import():
+    kind     = request.form.get("kind", "shipments")
+    fmt_map  = request.form.get("field_map", "")
+    if "file" not in request.files:
+        flash("No file selected", "error")
+        return redirect(url_for("mes_page"))
+
+    f = request.files["file"]
+    if not f.filename:
+        flash("No file selected", "error")
+        return redirect(url_for("mes_page"))
+
+    dest = UPLOAD_DIR / f"mes_import_{secure_filename(f.filename)}"
+    f.save(str(dest))
+
+    try:
+        field_map = None
+        if fmt_map and fmt_map in mes_connector.FIELD_MAPS:
+            field_map = mes_connector.FIELD_MAPS[fmt_map]
+
+        records = mes_connector.auto_import(str(dest), field_map=field_map)
+
+        # Save as standard OpsCore CSV
+        target_name = "shipments.csv" if kind == "shipments" else "kpis.csv"
+        out_path = UPLOAD_DIR / target_name
+        mes_connector.export_csv(records, str(out_path))
+
+        flash(f"✅ Imported {len(records)} records from MES file as {kind} data", "success")
+    except Exception as e:
+        flash(f"Import error: {e}", "error")
+    finally:
+        dest.unlink(missing_ok=True)
+
+    return redirect(url_for("index"))
+
+@app.route("/mes/export/<kind>")
+def mes_export(kind):
+    import io
+    from flask import send_file
+
+    fmt = request.args.get("fmt", "csv")
+    t_stats, shipments, kpi_data, _ = load_dashboard_data()
+
+    if kind == "shipments":
+        data = shipments
+        filename = f"opscore_shipments.{fmt}"
+    elif kind == "kpis":
+        data = []
+        for metric, s in kpi_data.items():
+            for h in s.get("history", []):
+                data.append({**h, "metric_name": metric})
+        filename = f"opscore_kpis.{fmt}"
+    else:
+        flash("Unknown export kind", "error")
+        return redirect(url_for("mes_page"))
+
+    out_path = str(UPLOAD_DIR / filename)
+    try:
+        mes_connector.auto_export(data, out_path)
+        return send_file(out_path, as_attachment=True, download_name=filename)
+    except Exception as e:
+        flash(f"Export error: {e}", "error")
+        return redirect(url_for("mes_page"))
+
+# ── Live Tracker Routes ─────────────────────────────────────────────────────────
+
+@app.route("/tracking")
+def tracking_page():
+    tracked = live_tracker.list_tracked()
+    return render_template("tracking.html", tracked=tracked)
+
+@app.route("/tracking/add", methods=["POST"])
+def tracking_add():
+    tn      = request.form.get("tracking_number", "").strip()
+    carrier = request.form.get("carrier", "").strip() or None
+    label   = request.form.get("label", "").strip() or None
+    if not tn:
+        flash("Tracking number required", "error")
+        return redirect(url_for("tracking_page"))
+    live_tracker.add_tracking(tn, carrier, label)
+    flash(f"✅ Now tracking {label or tn}", "success")
+    return redirect(url_for("tracking_page"))
+
+@app.route("/tracking/check")
+def tracking_check():
+    updates = live_tracker.check_all(alert=True)
+    changed = sum(1 for u in updates if u.get("changed"))
+    flash(f"Checked {len(updates)} shipment(s) — {changed} status change(s)", "success" if changed else "info")
+    return redirect(url_for("tracking_page"))
+
+@app.route("/tracking/remove/<tracking_number>")
+def tracking_remove(tracking_number):
+    live_tracker.remove_tracking(tracking_number)
+    flash(f"Removed {tracking_number}", "info")
+    return redirect(url_for("tracking_page"))
+
+@app.route("/api/tracking")
+def api_tracking():
+    return jsonify(live_tracker.list_tracked())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

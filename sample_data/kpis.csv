@@ -1,0 +1,29 @@
+date,metric_name,value,unit,target,notes
+2026-02-01,on_time_delivery_rate,91.2,%,95,
+2026-02-08,on_time_delivery_rate,88.7,%,95,
+2026-02-15,on_time_delivery_rate,93.1,%,95,
+2026-02-22,on_time_delivery_rate,90.4,%,95,
+2026-03-01,on_time_delivery_rate,89.8,%,95,
+2026-03-08,on_time_delivery_rate,72.3,%,95,Storm week
+2026-03-15,on_time_delivery_rate,91.5,%,95,
+2026-02-01,damage_rate,1.2,%,2,
+2026-02-08,damage_rate,0.9,%,2,
+2026-02-15,damage_rate,1.4,%,2,
+2026-02-22,damage_rate,0.8,%,2,
+2026-03-01,damage_rate,1.1,%,2,
+2026-03-08,damage_rate,4.7,%,2,Forklift incident
+2026-03-15,damage_rate,1.0,%,2,
+2026-02-01,orders_processed,842,units,,
+2026-02-08,orders_processed,904,units,,
+2026-02-15,orders_processed,876,units,,
+2026-02-22,orders_processed,921,units,,
+2026-03-01,orders_processed,955,units,,
+2026-03-08,orders_processed,612,units,,Storm reduced capacity
+2026-03-15,orders_processed,948,units,,
+2026-02-01,avg_handling_time,14.2,minutes,15,
+2026-02-08,avg_handling_time,13.8,minutes,15,
+2026-02-15,avg_handling_time,15.1,minutes,15,
+2026-02-22,avg_handling_time,14.5,minutes,15,
+2026-03-01,avg_handling_time,13.9,minutes,15,
+2026-03-08,avg_handling_time,22.4,minutes,15,Understaffed
+2026-03-15,avg_handling_time,14.1,minutes,15,

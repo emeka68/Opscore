@@ -1,0 +1,16 @@
+tracking_id,carrier,origin,destination,ship_date,expected_date,actual_delivery_date,status,notes
+TRK001,UPS,Seattle WA,Los Angeles CA,2026-03-01,2026-03-05,2026-03-05,delivered,
+TRK002,FEDEX,Miami FL,New York NY,2026-03-02,2026-03-06,2026-03-08,delivered,Weather delay
+TRK003,UPS,Chicago IL,Houston TX,2026-03-03,2026-03-07,,in_transit,
+TRK004,USPS,Seattle WA,Portland OR,2026-03-04,2026-03-06,,delayed,Carrier scan missed
+TRK005,FEDEX,Dallas TX,Atlanta GA,2026-03-05,2026-03-09,2026-03-09,delivered,
+TRK006,UPS,Boston MA,Philadelphia PA,2026-03-06,2026-03-10,,in_transit,
+TRK007,DHL,New York NY,Chicago IL,2026-03-01,2026-03-04,,exception,Address issue
+TRK008,FEDEX,Seattle WA,San Francisco CA,2026-03-07,2026-03-11,2026-03-10,delivered,Early
+TRK009,UPS,Houston TX,Denver CO,2026-03-08,2026-03-12,,in_transit,
+TRK010,USPS,Los Angeles CA,Phoenix AZ,2026-03-03,2026-03-07,,delayed,Volume backlog
+TRK011,UPS,Seattle WA,Vancouver WA,2026-03-10,2026-03-12,2026-03-12,delivered,
+TRK012,FEDEX,Chicago IL,Detroit MI,2026-03-09,2026-03-13,,delayed,Sorting error
+TRK013,DHL,Miami FL,Orlando FL,2026-03-11,2026-03-13,2026-03-13,delivered,
+TRK014,UPS,Portland OR,Seattle WA,2026-03-12,2026-03-14,,in_transit,
+TRK015,USPS,New York NY,Newark NJ,2026-03-10,2026-03-12,2026-03-14,delivered,2 days late

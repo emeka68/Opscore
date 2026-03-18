@@ -201,7 +201,7 @@ def check_all(alert=True) -> list:
         state[tracking_number]["last_location"] = location
         state[tracking_number]["last_checked"]  = datetime.now(timezone.utc).isoformat()
 
-        updates.append({
+        update_record = {
             **entry,
             "tracking_number": tracking_number,
             "new_status": new_status,
@@ -210,7 +210,16 @@ def check_all(alert=True) -> list:
             "location": location,
             "events": update.get("events", []),
             "estimated_delivery": update.get("estimated_delivery", ""),
-        })
+        }
+        updates.append(update_record)
+
+        # Auto-create exception record for problematic statuses
+        if changed and new_status in {"Exception", "AttemptFail", "Expired"}:
+            try:
+                from . import exceptions_mgr
+                exceptions_mgr.auto_create_from_tracking_update(update_record)
+            except Exception:
+                pass
 
         # Alert on significant status changes
         if changed and new_status in ALERT_ON_STATUSES and alert:

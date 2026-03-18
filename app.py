@@ -13,10 +13,13 @@ from werkzeug.utils import secure_filename
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
-from opscore import tracker, kpi, anomaly, sop, mes_connector, live_tracker
+from opscore import tracker, kpi, anomaly, sop, mes_connector, live_tracker, exceptions_mgr, scheduler
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "opscore-dev-key-change-in-prod")
+
+# Start background scheduler on app load
+scheduler.start()
 
 UPLOAD_DIR   = Path("uploads")
 SAMPLE_DIR   = Path("sample_data")
@@ -245,9 +248,91 @@ def tracking_remove(tracking_number):
     flash(f"Removed {tracking_number}", "info")
     return redirect(url_for("tracking_page"))
 
+@app.route("/tracking/bulk", methods=["POST"])
+def tracking_bulk():
+    """Upload a CSV with columns: tracking_number, carrier (opt), label (opt)"""
+    if "file" not in request.files:
+        flash("No file selected", "error")
+        return redirect(url_for("tracking_page"))
+    f = request.files["file"]
+    if not f.filename:
+        flash("No file selected", "error")
+        return redirect(url_for("tracking_page"))
+
+    import csv, io
+    content = f.read().decode("utf-8-sig")
+    reader  = csv.DictReader(io.StringIO(content))
+
+    added, skipped = 0, 0
+    for row in reader:
+        tn = (row.get("tracking_number") or row.get("TrackingNumber") or
+              row.get("tracking") or row.get("Tracking") or "").strip()
+        if not tn:
+            skipped += 1
+            continue
+        carrier = (row.get("carrier") or row.get("Carrier") or "").strip() or None
+        label   = (row.get("label")   or row.get("Label")   or
+                   row.get("description") or "").strip() or None
+        live_tracker.add_tracking(tn, carrier, label)
+        added += 1
+
+    flash(f"✅ Bulk import: {added} shipment(s) added{f', {skipped} skipped' if skipped else ''}", "success")
+    return redirect(url_for("tracking_page"))
+
 @app.route("/api/tracking")
 def api_tracking():
     return jsonify(live_tracker.list_tracked())
+
+# ── Exception Management Routes ─────────────────────────────────────────────────
+
+@app.route("/exceptions")
+def exceptions_page():
+    show_resolved = request.args.get("resolved", "false") == "true"
+    excs  = exceptions_mgr.get_all(include_resolved=show_resolved)
+    stats = exceptions_mgr.get_stats()
+    return render_template("exceptions.html", exceptions=excs, stats=stats,
+                           show_resolved=show_resolved)
+
+@app.route("/exceptions/<exc_id>")
+def exception_detail(exc_id):
+    exc = exceptions_mgr.get_by_id(exc_id)
+    if not exc:
+        flash("Exception not found", "error")
+        return redirect(url_for("exceptions_page"))
+    return render_template("exception_detail.html", exc=exc)
+
+@app.route("/exceptions/<exc_id>/note", methods=["POST"])
+def exception_note(exc_id):
+    note   = request.form.get("note", "").strip()
+    author = request.form.get("author", "Ops Team").strip()
+    if note:
+        exceptions_mgr.add_note(exc_id, note, author)
+        flash("Note added", "success")
+    return redirect(url_for("exception_detail", exc_id=exc_id))
+
+@app.route("/exceptions/<exc_id>/status", methods=["POST"])
+def exception_status(exc_id):
+    new_status = request.form.get("status", "")
+    note       = request.form.get("note", "")
+    if exceptions_mgr.update_status(exc_id, new_status, note):
+        flash(f"Status updated to {new_status}", "success")
+    return redirect(url_for("exception_detail", exc_id=exc_id))
+
+@app.route("/exceptions/<exc_id>/assign", methods=["POST"])
+def exception_assign(exc_id):
+    assignee = request.form.get("assignee", "").strip()
+    if assignee:
+        exceptions_mgr.assign(exc_id, assignee)
+        flash(f"Assigned to {assignee}", "success")
+    return redirect(url_for("exception_detail", exc_id=exc_id))
+
+@app.route("/api/exceptions")
+def api_exceptions():
+    return jsonify(exceptions_mgr.get_all(include_resolved=True))
+
+@app.route("/api/scheduler/status")
+def api_scheduler_status():
+    return jsonify(scheduler.get_status())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))

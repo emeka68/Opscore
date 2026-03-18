@@ -1,0 +1,33 @@
+[
+  {
+    "id": "9aca0558",
+    "received_at": "2026-03-18T06:38:06.245798+00:00",
+    "ingested_at": "2026-03-18T06:38:06.245985+00:00",
+    "subject": "Pre-Alert #PA-2026-0341 | UPS | ETA March 24",
+    "sender": "logistics@maritimesupplies.com",
+    "company": "Maritimesupplies",
+    "tracking_entries": [
+      {
+        "tracking_number": "1Z999AA10123456784",
+        "carrier": "ups"
+      }
+    ],
+    "carrier_detected": "ups",
+    "eta": "2026-03-24",
+    "po_numbers": [
+      "PO-2026-00341",
+      "Number",
+      "2026"
+    ],
+    "description": "Galley equipment - commercial grade cookware",
+    "weight": "48 kg",
+    "raw_dates": [
+      "2026-03-17",
+      "2026-03-24"
+    ],
+    "status": "new",
+    "tracked": false,
+    "notes": "",
+    "raw_text": "Pre-Alert Notification\nFrom: Maritime Supplies Ltd\nPO Number: PO-2026-00341\nShip Date: 2026-03-17\nETA: 2026-03-24\nCarrier: UPS\nTracking Number: 1Z999AA10123456784\nDescription: Galley equipment - commercial grade cookware\nWeight: 48 kg\nPlease confirm receipt of this pre-alert."
+  }
+]

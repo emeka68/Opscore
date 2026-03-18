@@ -13,7 +13,7 @@ from werkzeug.utils import secure_filename
 
 import sys
 sys.path.insert(0, os.path.dirname(__file__))
-from opscore import tracker, kpi, anomaly, sop, mes_connector, live_tracker, exceptions_mgr, scheduler
+from opscore import tracker, kpi, anomaly, sop, mes_connector, live_tracker, exceptions_mgr, scheduler, prealert
 
 app = Flask(__name__)
 app.secret_key = os.environ.get("SECRET_KEY", "opscore-dev-key-change-in-prod")
@@ -333,6 +333,115 @@ def api_exceptions():
 @app.route("/api/scheduler/status")
 def api_scheduler_status():
     return jsonify(scheduler.get_status())
+
+# ── Pre-Alert Routes ────────────────────────────────────────────────────────────
+
+@app.route("/prealerts")
+def prealerts_page():
+    sort_by      = request.args.get("sort", "date")
+    status_filter = request.args.get("status", None)
+    alerts_list  = prealert.get_all(status_filter=status_filter, sort_by=sort_by)
+    stats        = prealert.get_stats()
+    imap_configured = bool(prealert.EMAIL_ADDR and prealert.EMAIL_PASS)
+    return render_template("prealerts.html", alerts=alerts_list, stats=stats,
+                           sort_by=sort_by, status_filter=status_filter,
+                           imap_configured=imap_configured)
+
+@app.route("/prealerts/fetch", methods=["POST"])
+def prealerts_fetch():
+    """Fetch new pre-alerts from IMAP inbox."""
+    unread_only = request.form.get("unread_only", "true") == "true"
+    limit       = int(request.form.get("limit", "20"))
+    fetched = prealert.fetch_from_imap(limit=limit, unread_only=unread_only)
+    if fetched:
+        added = prealert.ingest_many(fetched)
+        flash(f"✅ Fetched {len(fetched)} email(s), {added} new pre-alert(s) added", "success")
+    else:
+        flash("No new emails found or IMAP not configured", "info")
+    return redirect(url_for("prealerts_page"))
+
+@app.route("/prealerts/upload", methods=["POST"])
+def prealerts_upload():
+    """Upload .eml file or paste raw email text."""
+    text   = request.form.get("email_text", "").strip()
+    sender = request.form.get("sender", "").strip()
+    subj   = request.form.get("subject", "Manual Upload").strip()
+
+    # File upload (.eml)
+    if "file" in request.files and request.files["file"].filename:
+        f = request.files["file"]
+        raw = f.read()
+        try:
+            parsed = prealert.parse_raw_email(raw)
+            prealert.ingest(parsed)
+            flash(f"✅ Parsed .eml: found {len(parsed['tracking_entries'])} tracking number(s)", "success")
+        except Exception as e:
+            flash(f"Parse error: {e}", "error")
+        return redirect(url_for("prealerts_page"))
+
+    # Pasted text
+    if text:
+        parsed = prealert.parse_email_text(text, sender=sender, subject=subj)
+        prealert.ingest(parsed)
+        flash(f"✅ Parsed email text: found {len(parsed['tracking_entries'])} tracking number(s)", "success")
+        return redirect(url_for("prealerts_detail", pa_id=parsed["id"]))
+
+    flash("No file or text provided", "error")
+    return redirect(url_for("prealerts_page"))
+
+@app.route("/prealerts/<pa_id>")
+def prealerts_detail(pa_id):
+    pa = prealert.get_by_id(pa_id)
+    if not pa:
+        flash("Pre-alert not found", "error")
+        return redirect(url_for("prealerts_page"))
+    return render_template("prealert_detail.html", pa=pa)
+
+@app.route("/prealerts/<pa_id>/track", methods=["POST"])
+def prealerts_track(pa_id):
+    """Push one tracking number to Live Tracker."""
+    tn      = request.form.get("tracking_number", "").strip()
+    carrier = request.form.get("carrier", "").strip() or None
+    label   = request.form.get("label", "").strip() or None
+    if tn:
+        live_tracker.add_tracking(tn, carrier, label)
+        prealert.mark_tracked(pa_id)
+        flash(f"✅ Added {tn} to Live Tracker", "success")
+    return redirect(url_for("prealerts_detail", pa_id=pa_id))
+
+@app.route("/prealerts/<pa_id>/track-all", methods=["POST"])
+def prealerts_track_all(pa_id):
+    """Push all tracking numbers from this pre-alert to Live Tracker."""
+    pa = prealert.get_by_id(pa_id)
+    if not pa:
+        flash("Pre-alert not found", "error")
+        return redirect(url_for("prealerts_page"))
+
+    company = pa.get("company", "")
+    added = 0
+    for entry in pa.get("tracking_entries", []):
+        tn      = entry.get("tracking_number", "")
+        carrier = entry.get("carrier", "") or None
+        label   = f"{company} — {pa.get('subject','')[:40]}" if company else pa.get("subject","")[:50]
+        if tn:
+            live_tracker.add_tracking(tn, carrier, label)
+            added += 1
+
+    prealert.mark_tracked(pa_id)
+    flash(f"✅ Sent {added} tracking number(s) to Live Tracker", "success")
+    return redirect(url_for("prealerts_detail", pa_id=pa_id))
+
+@app.route("/prealerts/<pa_id>/status", methods=["POST"])
+def prealerts_status(pa_id):
+    status = request.form.get("status", "reviewed")
+    notes  = request.form.get("notes", "")
+    prealert.update_status(pa_id, status, notes)
+    flash(f"Status updated to {status}", "info")
+    return redirect(url_for("prealerts_detail", pa_id=pa_id))
+
+@app.route("/api/prealerts")
+def api_prealerts():
+    return jsonify(prealert.get_all())
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))
